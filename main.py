@@ -2,7 +2,7 @@ import random
 from graph import Graph
 import re
 
-K_MER_SIZE: int = 5
+K_MER_SIZE: int = 15
 FILE = 'example.fastq'
 
 class Correction_ratio:
@@ -76,7 +76,7 @@ def get_graph_from_k_mers(k_mers: list, g: Graph):
                 g.add_edge((k_mer,succ))
     return g
 
-def count_k_mers(k_mers: list, d: dict):
+def count_k_mers(k_mers, d: dict):
     for k_mer in k_mers:
         if k_mer in d:
             d[k_mer] = d[k_mer] + 1
@@ -87,14 +87,14 @@ def count_k_mers(k_mers: list, d: dict):
 def k_mers_count_above_solidity_threshold(dictionary: dict, threshold: int):
     result = dict()
     for d in dictionary.items():
-        if d[1] >= threshold:
+        if d[1] > threshold:
             result[d[0]] = d[1]
     return result
 
 def k_mers_above_solidity_threshold(dictionary: dict, threshold: int):
     result = list()
     for d in dictionary.keys():
-        if dictionary[d] >= threshold:
+        if dictionary[d] > threshold:
             result.append(d)
     return result
 
@@ -132,7 +132,7 @@ def remove_dead_ends(g: Graph, limit: int):
         g.delete_node(n)
     return g
 
-def remove_all_below_unitig_threshold(g: Graph, threshold: int, k_mer_count: dict):
+def remove_all_below_unitig_threshold(g: Graph, threshold: float, k_mer_count: dict):
     for n in g.nodes:
         k_mers: list = get_k_mers(n)
         unitig_abundance = sum([k_mer_count[k_mer] for k_mer in k_mers])/len(k_mers)
@@ -140,7 +140,7 @@ def remove_all_below_unitig_threshold(g: Graph, threshold: int, k_mer_count: dic
             g.delete_node(n)
     return g
 
-def clean_graph(g: Graph, iterations: int, limit: int, threshold: int, k_mer_count: dict):
+def clean_graph(g: Graph, iterations: int, limit: int, threshold: float, k_mer_count: dict):
     for i in range(iterations):
         remove_dead_ends(g, limit)
         remove_all_below_unitig_threshold(g, threshold, k_mer_count)
@@ -221,30 +221,68 @@ def read_file():
                 count_k_mers(k_mers, counts)
     return counts
 
+def divide_into_reads(code: str):
+    l = len(code)
+    reads = set()
+    for i in range(200):
+        read_len = random.randrange(20,100)
+        start = random.randrange(0,l-read_len)
+        real_read = code[start:start + read_len]
+        simulated_read = introduce_errors(real_read, 0.05)
+        print(simulated_read)
+        reads.add(simulated_read)
+    print(reads)
+    return reads
 
 
-
-genetic_read = get_genetic_string(16000)
-errors_read = introduce_errors(genetic_read, 0.1)
-k_mers = get_k_mers(errors_read)
-k_mer_count = count_k_mers(k_mers, dict())
-filtered_k_mer_count = k_mers_count_above_solidity_threshold(k_mer_count, 2)
-filtered_k_mers = k_mers_above_solidity_threshold(k_mer_count, 2)
-g = get_graph_from_k_mers(filtered_k_mers, Graph())
+real_code = get_genetic_string(4000)
+print('real sequence:  ', real_code)
+print('READS:')
+reads = divide_into_reads(real_code)
+print('K-MERS:')
+count = dict()
+for read in reads:
+    k_mers = get_k_mers(read)
+    count_k_mers(k_mers,count)
+    print(k_mers)
+print(count)
+filtered = k_mers_above_solidity_threshold(count, 0)
+print(filtered)
+g = get_graph_from_k_mers(filtered, Graph())
 compact_graph(g)
-clean_graph(g,10, 2*(K_MER_SIZE-1),4,k_mer_count)
-res = read_mapping(g, errors_read, 10)
-print('real sequence:  ', genetic_read)
-print('erroneous read: ',errors_read)
-print('k-mers:         ',k_mers)
-print('counts:         ',k_mer_count)
-print("after threshold:",filtered_k_mers)
-print('nodes:          ',g.nodes)
-print('edges:          ',g.edges)
-print(res)
+clean_graph(g, 5, (K_MER_SIZE-1),4,count)
+print(g.nodes)
+print(g.edges)
+for r in reads:
+    res = read_mapping(g, r, 5)
+    corrected = [x for x in res if x]
+    print(corrected)
+    if corrected:
+        for c in corrected:
+            print(str(c[0]) + " remaining: ", c[1].corrected)
 
 
-count = read_file()
+# genetic_read = get_genetic_string(16000)
+# errors_read = introduce_errors(genetic_read, 0.1)
+# k_mers = get_k_mers(errors_read)
+# k_mer_count = count_k_mers(k_mers, dict())
+# filtered_k_mer_count = k_mers_count_above_solidity_threshold(k_mer_count, 2)
+# filtered_k_mers = k_mers_above_solidity_threshold(k_mer_count, 2)
+# g = get_graph_from_k_mers(filtered_k_mers, Graph())
+# compact_graph(g)
+# clean_graph(g,10, 2*(K_MER_SIZE-1),4,k_mer_count)
+# res = read_mapping(g, errors_read, 10)
+# print('real sequence:  ', genetic_read)
+# print('erroneous read: ',errors_read)
+# print('k-mers:         ',k_mers)
+# print('counts:         ',k_mer_count)
+# print("after threshold:",filtered_k_mers)
+# print('nodes:          ',g.nodes)
+# print('edges:          ',g.edges)
+# print(res)
+#
+#
+# count = read_file()
 # print(count)
 # k_mers = k_mers_above_solidity_threshold(count, 15)
 # k_mer_count = k_mers_count_above_solidity_threshold(count, 15)
